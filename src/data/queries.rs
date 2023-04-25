@@ -11,7 +11,7 @@ use mysql_common::row::Row;
 use mysql_common::rust_decimal::Decimal;
 use serde::{Serialize, Deserialize};
 use crate::datatypes::structs::{Account, Wallet};
-use crate::datatypes::system_datatypes::{AccountIdType, ProductIdType, TransactionCodeType, TransactionsIdType, WalletIdType};
+use crate::datatypes::system_datatypes::*;
 use crate::{extract_bool, extract_decimal, extract_decimal_opt, extract_value, new_error};
 use crate::utils::MyResult;
 
@@ -69,6 +69,13 @@ pub struct TransactionConfirmed {
     pub(super) transactions_pending_id: Option<TransactionsIdType>,
     pub(super) installment_number: u8,
     pub(super) installments_count: u8
+}
+
+#[derive(Debug)]
+pub struct Currencies {
+    id: CurrenciesIdType,
+    iso_3: Iso3IdType,
+    name: String
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -135,6 +142,18 @@ impl FromRow for TransactionConfirmed {
     fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
 }
 
+impl FromRow for Currencies {
+    fn from_row(row: Row) -> Self where Self: Sized {
+        Currencies{
+            id: extract_value!(row, "ID", "currencies", CurrenciesIdType),
+            iso_3: extract_value!(row, "iso_3", "currencies", Iso3IdType),
+            name: extract_value!(row, "name", "currencies", String)
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////   QUERIES   ////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -183,4 +202,61 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
     println!("{:?}", result.unwrap());
 
     Ok(())
+}
+
+pub async fn get_currencies(conn: &mut Conn) -> MyResult<()> {
+    let stmt = format!("SELECT * FROM currencies");
+
+    let currencies_vec = conn.query::<Currencies, _>(stmt)
+        .await
+        .map_err(|e| new_error!(e.to_string(), ErrorTypes::DbConn))?;
+
+    for currency in currencies_vec {
+        if (currency.id == 840) | (currency.id == 604) | (currency.id == 32) {
+            println!("{}: {} -> {}", currency.id, currency.iso_3, currency.name);
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn get_transaction_codes(conn: &mut Conn) -> MyResult<()> {
+
+    let stmt = format!("SELECT * FROM transaction_codes WHERE transaction_categories_ID IN (0,4)");
+
+    let transaction_codes = conn.query::<TransactionCodes, _>(stmt)
+        .await
+        .map_err(|e| new_error!(e.to_string(), ErrorTypes::DbConn))?;
+
+    for transaction_code in transaction_codes {
+        if transaction_code.transaction_categories_id == 4 {
+            println!("{}: {} -> {}", transaction_code.id, transaction_code.name, transaction_code.description);
+        }
+        if transaction_code.id >= 1000 {
+            println!("{}: {} -> {}", transaction_code.id, transaction_code.name, transaction_code.description);
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+pub struct TransactionCodes {
+    id: TransactionCodeType,
+    transaction_categories_id: TransactionCategoriesIdType,
+    name: String,
+    description: String
+}
+
+impl FromRow for TransactionCodes {
+    fn from_row(row: Row) -> Self where Self: Sized {
+        TransactionCodes{
+            id: extract_value!(row, "ID", "transaction_codes", TransactionCodeType),
+            transaction_categories_id: extract_value!(row, "transaction_categories_ID", "transaction_codes", TransactionCategoriesIdType),
+            name: extract_value!(row, "name", "transaction_codes", String),
+            description: extract_value!(row, "description", "transaction_codes", String)
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
 }

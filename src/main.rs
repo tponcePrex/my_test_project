@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 #![allow(unused_must_use)]
 use crate::data::db_conn::init_db_conn;
-use crate::data::queries::{get_json_from_db, get_account_charges_data, get_transactions_confirmed};
+use crate::data::queries::{get_json_from_db, get_account_charges_data, get_transactions_confirmed, get_currencies, get_transaction_codes};
 
 mod data;
 mod utils;
@@ -15,5 +15,11 @@ async fn main() {
 
     //get_json_from_db(&mut conn).await;
     //get_account_charges_data(&mut conn).await;
-    get_transactions_confirmed(&mut conn).await;
+    //get_transactions_confirmed(&mut conn).await;
+    get_currencies(&mut conn).await;
+    println!(" ");
+    println!(" ");
+    println!(" ");
+    get_transaction_codes(&mut conn).await;
+
 }
