@@ -1,6 +1,6 @@
-#[allow(unused_imports)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
 use crate::data::db_conn::init_db_conn;
-#[allow(unused_imports)]
 use crate::data::queries::{
     select_json_from_db,
     get_account_charges_data

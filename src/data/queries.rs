@@ -1,4 +1,4 @@
-#[allow(unused_imports)]
+
 use std::process::exit;
 use mysql_async::Conn;
 use mysql_async::prelude::Queryable;
@@ -34,7 +34,6 @@ pub struct FullQuery {
     updated_at: String
 }
 
-#[allow(dead_code)]
 pub async fn select_json_from_db(conn: &mut Conn) {
 
     let json_vec = conn.query::<FullQuery,_>(
@@ -109,5 +108,5 @@ impl FromRow for AccountStatements {
         }
     }
 
-    fn from_row_opt(row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
 }

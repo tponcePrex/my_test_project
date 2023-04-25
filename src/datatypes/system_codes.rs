@@ -3,7 +3,6 @@ use serde::{Serialize, Serializer};
 use crate::datatypes::response_codes::ResponseCodes;
 use logger::{ErrorTypes, Locations, MyError};
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemErrorCodes {
     Unknown,// Supports older versions where InternalResponseCodes was not present, do not use
