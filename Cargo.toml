@@ -1,0 +1,20 @@
+[package]
+name = "my_own_tests"
+version = "0.1.0"
+authors = ["Tommy"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-rt = "2.7.0"
+actix-service = "2.0.0"
+actix-web = { version = "4.2", features = ["openssl"] }
+bucketizer = { git = "https://bitbucket.org/jmarin-prex/bucketizer.git", tag = "v1.0.1"}
+lazy_static = "1.4.0"
+mysql_async = "0.31.3"
+mysql_common = { version = "0.29.2", features = ["chrono"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.21", features = ["full"] }
+logger = { git = "https://bitbucket.org/jmarin-prex/logger.git", tag = "v1.3.16"}
