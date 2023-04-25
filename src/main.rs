@@ -15,11 +15,8 @@ async fn main() {
 
     //get_json_from_db(&mut conn).await;
     //get_account_charges_data(&mut conn).await;
-    //get_transactions_confirmed(&mut conn).await;
-    get_currencies(&mut conn).await;
-    println!(" ");
-    println!(" ");
-    println!(" ");
-    get_transaction_codes(&mut conn).await;
+    get_transactions_confirmed(&mut conn).await;
+    //get_currencies(&mut conn).await;
+    //get_transaction_codes(&mut conn).await;
 
 }
