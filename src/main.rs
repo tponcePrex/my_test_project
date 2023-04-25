@@ -1,10 +1,8 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
+#![allow(unused_must_use)]
 use crate::data::db_conn::init_db_conn;
-use crate::data::queries::{
-    select_json_from_db,
-    get_account_charges_data
-};
+use crate::data::queries::{get_json_from_db, get_account_charges_data, get_transactions_confirmed};
 
 mod data;
 mod utils;
@@ -15,7 +13,7 @@ async fn main() {
 
     let mut conn = init_db_conn().await.unwrap();
 
-    //select_json_from_db(&mut conn).await;
-    get_account_charges_data(&mut conn).await;
-
+    //get_json_from_db(&mut conn).await;
+    //get_account_charges_data(&mut conn).await;
+    get_transactions_confirmed(&mut conn).await;
 }

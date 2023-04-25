@@ -77,3 +77,19 @@ macro_rules! extract_bool_opt {
         }
     };
 }
+
+#[macro_export]
+macro_rules! new_error {
+    ($message:expr, $error_type:expr) => {
+        {
+            use $crate::datatypes::system_codes::MySystemError;
+            logger::MyError::<$crate::datatypes::system_codes::SystemErrorCodes>::new(logger::get_line_info!(), $message, $error_type)
+        }
+    };
+    ($message:expr) => {
+        {
+            use $crate::datatypes::system_codes::MySystemError;
+            logger::MyError::<$crate::datatypes::system_codes::SystemErrorCodes>::new(logger::get_line_info!(), $message, logger::ErrorTypes::Undefined)
+        }
+    }
+}

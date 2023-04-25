@@ -6,6 +6,10 @@ use crate::datatypes::system_datatypes::{AccountIdType, AccountParameterIdType, 
 use serde::{Deserialize, Serialize};
 use crate::extract_value;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////   STRUCTS   ////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Account {
     #[serde(skip_serializing)]
@@ -44,6 +48,10 @@ pub enum ParameterData {
     Unset,
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////   IMPLEMENTATIONS   ////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 impl FromRow for Account {
     fn from_row(row: Row) -> Self
         where
@@ -71,5 +79,16 @@ impl FromRow for Account {
             Self: Sized,
     {
         unimplemented!()
+    }
+}
+
+impl Wallet {
+    //  Creates a ghost wallet from the wallets_id and currencies id type
+    pub fn ghost_with_id(id: WalletIdType, currencies_id: CurrenciesIdType) -> Self {
+        Self {
+            id,
+            currencies_id,
+            charge_priority: 0,
+        }
     }
 }
