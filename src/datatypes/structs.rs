@@ -1,9 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
+use mysql_common::bigdecimal03::Zero;
+use mysql_common::chrono::NaiveDate;
 use mysql_common::row::convert::{FromRow, FromRowError};
 use mysql_common::row::Row;
 use mysql_common::rust_decimal::Decimal;
-use crate::datatypes::system_datatypes::{AccountIdType, AccountParameterIdType, AffinityGroupIdType, BlockIdType, CurrenciesIdType, FraudGroupsId, ParameterValueDate, ParameterValueDateTime, ParameterValueDecimal, ParameterValueInteger, ParameterValueRange, ProductIdType, WalletIdType};
+use crate::datatypes::system_datatypes::{AccountIdType, AccountParameterIdType, AffinityGroupIdType, BlockIdType, CurrenciesIdType, FraudGroupsId, ParameterValueDate, ParameterValueDateTime, ParameterValueDecimal, ParameterValueInteger, ParameterValueRange, ProductIdType, TransactionsIdType, WalletIdType};
 use serde::{Deserialize, Serialize};
+use tokio::io::Interest;
 use crate::extract_value;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -46,6 +49,94 @@ pub enum ParameterData {
     Datetime(ParameterValueDateTime),
     Range(ParameterValueRange),
     Unset,
+}
+
+//  HashMap de todos los intereses para todas las transacciones linkeado a un wallet
+//  Contiene el accounts_id, wallet_statements compuesto por un hashmap con todas las transacciones
+// de credito para ese wallets id, y el calculo de intereses total
+
+pub struct AccountStatementsResult {
+    pub accounts_id: AccountIdType,
+    pub wallet_statements: HashMap<WalletIdType, WalletStatementsResult>,
+    pub total_interest_for_wallet: TotalInterestForWallet,
+}
+
+pub struct WalletStatementsResult {
+    pub balance: Decimal,
+    pub previous_balance: Decimal,
+    pub minimum_payment: Decimal,
+    pub total_interests: InterestsForTransactions
+}
+
+//  Total de intereses esta compuesto por el total de intereses diario, total de intereses de
+// penalty (mora), y la fecha de cierre para la cual se esta calculando esos intereses
+pub struct TotalInterestForWallet {
+    pub total_daily_interest: Decimal,
+    pub total_penalty_interest: Decimal,
+    pub statement_day: NaiveDate
+}
+
+//  HashMap con key = transaction_id y payload = intereses para esa transaccion
+pub type InterestsForTransactions = HashMap<TransactionsIdType, InterestForTransaction>;
+
+//  Datos de intereses para cada transaccion en base a la cantidad de dias
+pub struct InterestForTransaction {
+    is_transaction_purchase: bool,
+    daily_interest_rate: Decimal,
+    total_daily_interest: Decimal,
+    is_client_in_penalty: bool,
+    penalty_interest_rate: Decimal,
+    total_penalty_interest: Decimal,
+    balances_date: NaiveDate
+}
+
+impl InterestForTransaction{
+    pub fn new() -> InterestForTransaction {
+        InterestForTransaction{
+            is_transaction_purchase: false,
+            daily_interest_rate: Decimal::zero(),
+            total_daily_interest: Decimal::zero(),
+            is_client_in_penalty: false,
+            penalty_interest_rate: Decimal::zero(),
+            total_penalty_interest: Decimal::zero(),
+            balances_date: NaiveDate::from_ymd_opt(2023, 1, 1).unwrap()
+        }
+    }
+    pub fn get_is_transaction_purchase(&self) -> bool { self.is_transaction_purchase }
+    pub fn set_is_transaction_purchase(&mut self, is_transaction_purchase: bool) {
+        self.is_transaction_purchase = is_transaction_purchase
+    }
+
+    pub fn get_daily_interest_rate(&self) -> Decimal { self.daily_interest_rate }
+    pub fn set_daily_interest_rate(&mut self, daily_interest_rate: Decimal) {
+        self.daily_interest_rate = daily_interest_rate
+    }
+
+    pub fn get_total_daily_interest(&self) -> Decimal { self.total_daily_interest }
+    pub fn set_total_daily_interest(&mut self, total_daily_interest: Decimal) {
+        self.total_daily_interest = total_daily_interest
+    }
+
+    pub fn get_is_client_in_penalty(&self) -> bool { self.is_client_in_penalty }
+    pub fn set_is_client_in_penalty(&mut self, is_client_in_penalty: bool) {
+        self.is_client_in_penalty = is_client_in_penalty
+    }
+
+    pub fn get_penalty_interest_rate(&self) -> Decimal { self.penalty_interest_rate }
+    pub fn set_penalty_interest_rate(&mut self, penalty_interest_rate: Decimal) {
+        self.penalty_interest_rate = penalty_interest_rate
+    }
+
+    pub fn get_total_penalty_interest(&self) -> Decimal { self.total_penalty_interest }
+    pub fn set_total_penalty_rate(&mut self, total_penalty_rate: Decimal) {
+        self.total_penalty_rate = total_penalty_rate
+    }
+
+    pub fn get_balances_date(&self) -> NaiveDate { self.balances_date }
+    pub fn set_balances_date(&mut self, balances_date: NaiveDate) {
+        self.balances_date = balances_date
+    }
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

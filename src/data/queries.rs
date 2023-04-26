@@ -1,4 +1,4 @@
-
+use std::collections::HashMap;
 use std::process::exit;
 use logger::ErrorTypes;
 use mysql_async::{Conn, Transaction};
@@ -6,12 +6,12 @@ use mysql_async::prelude::Queryable;
 use mysql_async::prelude::FromRow;
 use mysql_common::bigdecimal03::Zero;
 use mysql_common::chrono;
-use mysql_common::chrono::NaiveDate;
+use mysql_common::chrono::{Datelike, NaiveDate};
 use mysql_common::row::convert::FromRowError;
 use mysql_common::row::Row;
 use mysql_common::rust_decimal::Decimal;
 use serde::{Serialize, Deserialize};
-use crate::datatypes::structs::{Account, Wallet};
+use crate::datatypes::structs::{Account, InterestForTransaction, InterestsForTransactions, Wallet, WalletStatementsResult};
 use crate::datatypes::system_datatypes::*;
 use crate::{extract_bool, extract_decimal, extract_decimal_opt, extract_value, new_error};
 use crate::utils::MyResult;
@@ -77,6 +77,14 @@ pub struct Currencies {
     id: CurrenciesIdType,
     iso_3: Iso3IdType,
     name: String
+}
+
+#[derive(Debug)]
+pub struct TransactionCodes {
+    id: TransactionCodeType,
+    transaction_categories_id: TransactionCategoriesIdType,
+    name: String,
+    description: String
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -155,6 +163,19 @@ impl FromRow for Currencies {
     fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
 }
 
+impl FromRow for TransactionCodes {
+    fn from_row(row: Row) -> Self where Self: Sized {
+        TransactionCodes{
+            id: extract_value!(row, "ID", "transaction_codes", TransactionCodeType),
+            transaction_categories_id: extract_value!(row, "transaction_categories_ID", "transaction_codes", TransactionCategoriesIdType),
+            name: extract_value!(row, "name", "transaction_codes", String),
+            description: extract_value!(row, "description", "transaction_codes", String)
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////   QUERIES   ////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -226,99 +247,7 @@ pub async fn get_transaction_codes(conn: &mut Conn) -> MyResult<()> {
     Ok(())
 }
 
-#[derive(Debug)]
-pub struct TransactionCodes {
-    id: TransactionCodeType,
-    transaction_categories_id: TransactionCategoriesIdType,
-    name: String,
-    description: String
-}
-
-impl FromRow for TransactionCodes {
-    fn from_row(row: Row) -> Self where Self: Sized {
-        TransactionCodes{
-            id: extract_value!(row, "ID", "transaction_codes", TransactionCodeType),
-            transaction_categories_id: extract_value!(row, "transaction_categories_ID", "transaction_codes", TransactionCategoriesIdType),
-            name: extract_value!(row, "name", "transaction_codes", String),
-            description: extract_value!(row, "description", "transaction_codes", String)
-        }
-    }
-
-    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
-}
-
-pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
-
-    let wallets_id: u16 = 129;
-    let stmt = format!(
-        "SELECT * FROM transactions_confirmed WHERE wallets_ID = {} ORDER BY balances_date ASC", wallets_id);
-    let transactions = conn.query::<TransactionConfirmed, _>(stmt)
-        .await
-        .map_err(|e| {
-            println!("{}", e.to_string());
-            new_error!(e.to_string(), ErrorTypes::DbConn)
-        })?;
-
-    let mut positive_amount = Decimal::zero();
-    let mut negative_amount = Decimal::zero();
-    for transaction in transactions {
-        if transaction.debit_credit == 1 { positive_amount += transaction.amount }
-        else if transaction.debit_credit == -1 { negative_amount += transaction.amount }
-    }
-
-    let minimum_payment = Decimal::new(5000, 0);
-
-    let (balance, client_case) = calculate_client_balance_case(
-        &positive_amount,
-        &negative_amount,
-        &minimum_payment
-    );
-
-    println!("Expenses: {} \nDebt payed: {} \n", positive_amount, negative_amount);
-    println!("Balance: {} \nBalance Case: {:?} \n", balance, client_case);
-
-    Ok(())
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////   FUNCTIONS   //////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Debug)]
-pub enum ClientBalanceCaseType{
-    UpToDate,
-    MinimumCovered,
-    Penalty,
-    NoPayment,
-    TwoDaysGrace,
-    Undetermined
-}
-
-fn calculate_client_balance_case(
-    positive_amount: &Decimal,
-    negative_amount: &Decimal,
-    minimum_payment: &Decimal
-) -> (Decimal, ClientBalanceCaseType) {
-    let balance = &(positive_amount + negative_amount);
-
-    //  positive_amount: amount of credit granted to client
-    //  negative_amount: amount of money returned by the client (amount of debt payed)
-    //  If negative_amount is greater or equal than positive_amount, debt is fully covered
-    if *balance <= Decimal::zero() { return (*balance, ClientBalanceCaseType::UpToDate) }
-    //  If negative_amount is zero, then no debt payment was registered
-    else if *negative_amount == Decimal::zero() { return (*balance, ClientBalanceCaseType::NoPayment) }
-    //  If negative_amount is lesser than positive_amount then two cases can be applied
-    else if *balance > Decimal::zero() {
-        //  If balance is greater or equal than minimum_payment then minimum is covered
-        //  The zero - negative_amount is because the minimum_payment is positive
-        if Decimal::zero() - negative_amount >= *minimum_payment { (*balance, ClientBalanceCaseType::MinimumCovered) }
-        //  Else, debt payed by client is lesser than minimum_payment, then client's in penalty
-        else { (*balance, ClientBalanceCaseType::Penalty) }
-    }
-    else { (*balance, ClientBalanceCaseType::Undetermined) }
-    //  TwoDaysGrace is only available for Uruguay
-}
-
-// fn calculate_daily_interest_rate() -> TotalInterestType{
-//     let total_interest = Decimal::zero();
-// }

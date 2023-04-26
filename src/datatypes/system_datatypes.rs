@@ -17,7 +17,6 @@ pub type ParameterValueDecimal = Decimal;
 pub type ParameterValueDate = chrono::NaiveDate;
 pub type ParameterValueDateTime = chrono::NaiveDateTime;
 pub type ParameterValueRange = Ranger<f64>;
-pub type TotalInterestType = Decimal;
 pub type TransactionCategoriesIdType = u16;
 pub type TransactionCodeType = u32;
 pub type TransactionsIdType = u64;

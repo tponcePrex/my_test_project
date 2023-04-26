@@ -1,6 +1,7 @@
 pub mod db_conn;
 mod macros;
 pub mod queries;
+pub mod queries_transactions_confirmed;
 
 use lazy_static::lazy_static;
 use mysql_async::{Conn, Pool};
