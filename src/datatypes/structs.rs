@@ -55,17 +55,21 @@ pub enum ParameterData {
 //  Contiene el accounts_id, wallet_statements compuesto por un hashmap con todas las transacciones
 // de credito para ese wallets id, y el calculo de intereses total
 
+pub type AccountsStatementsResult = Vec<AccountStatementsResult>;
+
 pub struct AccountStatementsResult {
     pub accounts_id: AccountIdType,
     pub wallet_statements: HashMap<WalletIdType, WalletStatementsResult>,
     pub total_interest_for_wallet: TotalInterestForWallet,
 }
 
+//  Global statements previous and current for the wallet_id
 pub struct WalletStatementsResult {
     pub balance: Decimal,
     pub previous_balance: Decimal,
     pub minimum_payment: Decimal,
     pub total_interests: InterestsForTransactions
+    //  Incluir TotalInterestForWallet aca y sacar de AccountStatementsResult
 }
 
 //  Total de intereses esta compuesto por el total de intereses diario, total de intereses de
@@ -80,19 +84,34 @@ pub struct TotalInterestForWallet {
 pub type InterestsForTransactions = HashMap<TransactionsIdType, InterestForTransaction>;
 
 //  Datos de intereses para cada transaccion en base a la cantidad de dias
+#[derive(Debug, Clone, Copy)]
 pub struct InterestForTransaction {
+    /// Transaction amount
+    transaction_amount: Decimal,
+    /// Transaction amount relative to the payments made by the client. Ex: if purchase is fully covered by payment, effective_transaction_amount will be zero
+    effective_transaction_amount: Decimal,
+    /// True if transaction was a purchase, false if it was a payment
     is_transaction_purchase: bool,
+    /// Financial Daily interest rate determined by the type of purchased
     daily_interest_rate: Decimal,
+    /// Total financial daily interest for the purchase
     total_daily_interest: Decimal,
+    /// True if client is in penalty, false if they're not
+    // RENOMBRAR A DEFAULT
     is_client_in_penalty: bool,
+    /// Penalty interest rate
     penalty_interest_rate: Decimal,
+    /// Total penalty interest for the purchase transaction
     total_penalty_interest: Decimal,
+    /// Date when the transaction took place
     balances_date: NaiveDate
 }
 
 impl InterestForTransaction{
     pub fn new() -> InterestForTransaction {
         InterestForTransaction{
+            transaction_amount: Decimal::zero(),
+            effective_transaction_amount: Decimal::zero(),
             is_transaction_purchase: false,
             daily_interest_rate: Decimal::zero(),
             total_daily_interest: Decimal::zero(),
@@ -102,6 +121,17 @@ impl InterestForTransaction{
             balances_date: NaiveDate::from_ymd_opt(2023, 1, 1).unwrap()
         }
     }
+    //  Getters and setters for the InterestForTransaction private members
+    pub fn get_transaction_amount(&self) -> Decimal { self.transaction_amount }
+    pub fn set_transaction_amount(&mut self, transaction_amount: Decimal) {
+        self.transaction_amount = transaction_amount
+    }
+
+    pub fn get_effective_transaction_amount(&self) -> Decimal { self.effective_transaction_amount }
+    pub fn set_effective_transaction_amount(&mut self, effective_transaction_amount: Decimal) {
+        self.effective_transaction_amount = effective_transaction_amount
+    }
+
     pub fn get_is_transaction_purchase(&self) -> bool { self.is_transaction_purchase }
     pub fn set_is_transaction_purchase(&mut self, is_transaction_purchase: bool) {
         self.is_transaction_purchase = is_transaction_purchase
@@ -128,15 +158,14 @@ impl InterestForTransaction{
     }
 
     pub fn get_total_penalty_interest(&self) -> Decimal { self.total_penalty_interest }
-    pub fn set_total_penalty_rate(&mut self, total_penalty_rate: Decimal) {
-        self.total_penalty_rate = total_penalty_rate
+    pub fn set_total_penalty_interest(&mut self, total_penalty_interest: Decimal) {
+        self.total_penalty_interest = total_penalty_interest
     }
 
     pub fn get_balances_date(&self) -> NaiveDate { self.balances_date }
     pub fn set_balances_date(&mut self, balances_date: NaiveDate) {
         self.balances_date = balances_date
     }
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

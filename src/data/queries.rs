@@ -212,7 +212,7 @@ pub async fn get_json_from_db(conn: &mut Conn) {
 }
 
 pub async fn get_currencies(conn: &mut Conn) -> MyResult<()> {
-    let stmt = format!("SELECT * FROM currencies");
+    let stmt = "SELECT * FROM currencies".to_string();
 
     let currencies_vec = conn.query::<Currencies, _>(stmt)
         .await
@@ -229,7 +229,7 @@ pub async fn get_currencies(conn: &mut Conn) -> MyResult<()> {
 
 pub async fn get_transaction_codes(conn: &mut Conn) -> MyResult<()> {
 
-    let stmt = format!("SELECT * FROM transaction_codes WHERE transaction_categories_ID IN (0,4)");
+    let stmt = "SELECT * FROM transaction_codes WHERE transaction_categories_ID IN (0,4)".to_string();
 
     let transaction_codes = conn.query::<TransactionCodes, _>(stmt)
         .await
