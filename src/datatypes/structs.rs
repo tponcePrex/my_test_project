@@ -7,6 +7,8 @@ use mysql_common::rust_decimal::Decimal;
 use crate::datatypes::system_datatypes::{AccountIdType, AccountParameterIdType, AffinityGroupIdType, BlockIdType, CurrenciesIdType, FraudGroupsId, ParameterValueDate, ParameterValueDateTime, ParameterValueDecimal, ParameterValueInteger, ParameterValueRange, ProductIdType, TransactionsIdType, WalletIdType};
 use serde::{Deserialize, Serialize};
 use tokio::io::Interest;
+use crate::data::queries::TransactionConfirmed;
+use crate::data::queries_transactions_confirmed::{calculate_days_amount, ClientBalanceCaseType};
 use crate::extract_value;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -108,17 +110,24 @@ pub struct InterestForTransaction {
 }
 
 impl InterestForTransaction{
-    pub fn new() -> InterestForTransaction {
+    pub fn new(
+        s: &TransactionConfirmed,
+        daily_interest_rate: &Decimal,
+        penalty_interest_rate: &Decimal,
+        client_case: &ClientBalanceCaseType
+    ) -> InterestForTransaction {
         InterestForTransaction{
-            transaction_amount: Decimal::zero(),
-            effective_transaction_amount: Decimal::zero(),
-            is_transaction_purchase: false,
-            daily_interest_rate: Decimal::zero(),
+            transaction_amount: s.amount,
+            effective_transaction_amount: s.amount,
+            is_transaction_purchase: s.debit_credit != -1,
+            daily_interest_rate: *daily_interest_rate,
             total_daily_interest: Decimal::zero(),
-            is_client_in_penalty: false,
-            penalty_interest_rate: Decimal::zero(),
+            is_client_in_penalty: {
+                *client_case == ClientBalanceCaseType::Penalty
+            },
+            penalty_interest_rate: *penalty_interest_rate,
             total_penalty_interest: Decimal::zero(),
-            balances_date: NaiveDate::from_ymd_opt(2023, 1, 1).unwrap()
+            balances_date: s.balances_date
         }
     }
     //  Getters and setters for the InterestForTransaction private members
@@ -165,6 +174,101 @@ impl InterestForTransaction{
     pub fn get_balances_date(&self) -> NaiveDate { self.balances_date }
     pub fn set_balances_date(&mut self, balances_date: NaiveDate) {
         self.balances_date = balances_date
+    }
+
+    pub fn calculate_daily_interest_rate(
+        &mut self,
+        payments: &mut Decimal,
+        client_case: &ClientBalanceCaseType,
+        statement_day: &NaiveDate
+    ) {
+
+        //  Payments es negativo, por eso se suma siempre
+        //  Decrease payment value to determine when to start applying interests, or not if purchases are covered
+        if payments.abs() >= self.get_transaction_amount() {
+            //  Decreasing the value of payments and setting the effective_transaction_amount to zero
+            *payments += self.get_effective_transaction_amount();
+            self.set_effective_transaction_amount(Decimal::zero());
+            println!("New payments value: {}", payments);
+
+        } else if ( payments.abs() < self.get_effective_transaction_amount() )
+            && ( payments.abs() > Decimal::zero() ) {
+            //  Decreasing the value of effective transaction amount, and setting payments to zero
+            let mut effective_transaction_amount = self.get_effective_transaction_amount();
+            effective_transaction_amount += *payments;
+            self.set_effective_transaction_amount(effective_transaction_amount);
+            *payments = Decimal::zero();
+            println!("New payments value: {}", payments);
+
+        } else {
+            //  PLACEHOLDER TO UNDERSTAND LOGIC
+            //  payments is zero, meaning there was no payment, or there's no payment amount left to cover any more purchases
+            //  Making sure payments is zero
+            *payments = Decimal::zero();
+            println!("Payments value: {}", payments);
+
+        }
+
+        //  If the effective value for the transaction is greater than zero (debt not cancelled), calculate interests
+        if self.get_effective_transaction_amount() > Decimal::zero() {
+            //  Calculate interest according to the client's balance case
+            match client_case {
+                ClientBalanceCaseType::UpToDate => {
+                    //  If client is up to date, the interests will both be zero
+                    self.set_total_daily_interest(Decimal::zero());
+                    self.set_total_penalty_interest(Decimal::zero());
+                },
+                ClientBalanceCaseType::NoPayment => {
+                    //  If no payment was registered, both financial and penalty interests apply
+                    let days_amount = calculate_days_amount(
+                        &self.get_balances_date(),
+                        statement_day
+                    );
+
+                    self.set_total_daily_interest(
+                        self.get_effective_transaction_amount() * days_amount * self.get_daily_interest_rate()
+                    );
+                    self.set_total_penalty_interest(
+                        self.get_effective_transaction_amount() * days_amount * self.get_penalty_interest_rate()
+                    );
+                },
+                ClientBalanceCaseType::MinimumCovered => {
+                    //  If client has minimum payment covered, only financial interests apply
+                    let days_amount = calculate_days_amount(
+                        &self.get_balances_date(),
+                        statement_day
+                    );
+
+                    self.set_total_daily_interest(
+                        self.get_effective_transaction_amount() * days_amount * self.get_daily_interest_rate()
+                    );
+                },
+                ClientBalanceCaseType::Penalty => {
+                    //  If client is on penalty, both financial and penalty interests apply
+                    let days_amount = calculate_days_amount(
+                        &self.get_balances_date(),
+                        statement_day
+                    );
+
+                    self.set_total_daily_interest(
+                        self.get_effective_transaction_amount() * days_amount * self.get_daily_interest_rate()
+                    );
+                    self.set_total_penalty_interest(
+                        self.get_effective_transaction_amount() * days_amount * self.get_penalty_interest_rate()
+                    );
+                },
+                ClientBalanceCaseType::TwoDaysGrace => {
+                    //  @TODO: develop two days grace
+                },
+                ClientBalanceCaseType::Undetermined => {
+                    //  Nothing here, case is undetermined, shouldn't come to this
+                }
+            }
+            //  Otherwise, set interests values to zero
+        } else {
+            self.set_total_daily_interest(Decimal::zero());
+            self.set_total_penalty_interest(Decimal::zero());
+        }
     }
 }
 

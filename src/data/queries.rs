@@ -57,19 +57,19 @@ pub struct AccountStatements {
 
 #[derive(Debug)]
 pub struct TransactionConfirmed {
-    pub(super) id: TransactionsIdType,
-    pub(super) wallet: Wallet,
-    pub(super) balances_date: NaiveDate,
-    pub(super) transaction_code: TransactionCodeType,
-    pub(super) debit_credit: i8,
-    pub(super) amount: Decimal,
-    pub(super) authorization_amount: Option<Decimal>,
-    pub(super) part: usize,
-    pub(super) reference: usize,
-    pub(super) is_arbitration: bool,
-    pub(super) transactions_pending_id: Option<TransactionsIdType>,
-    pub(super) installment_number: u8,
-    pub(super) installments_count: u8
+    pub id: TransactionsIdType,
+    pub wallet: Wallet,
+    pub balances_date: NaiveDate,
+    pub transaction_code: TransactionCodeType,
+    pub debit_credit: i8,
+    pub amount: Decimal,
+    pub authorization_amount: Option<Decimal>,
+    pub part: usize,
+    pub reference: usize,
+    pub is_arbitration: bool,
+    pub transactions_pending_id: Option<TransactionsIdType>,
+    pub installment_number: u8,
+    pub installments_count: u8
 }
 
 #[derive(Debug)]
