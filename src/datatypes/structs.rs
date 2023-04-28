@@ -8,8 +8,14 @@ use crate::datatypes::system_datatypes::{AccountIdType, AccountParameterIdType, 
 use serde::{Deserialize, Serialize};
 use tokio::io::Interest;
 use crate::data::queries::TransactionConfirmed;
-use crate::data::queries_transactions_confirmed::ClientBalanceCaseType;
 use crate::extract_value;
+
+
+pub type AccountsStatementsResult = Vec<AccountStatementsResult>;
+
+/// HashMap that takes a TransactionsIdType as a key and InterestForTransaction for a single
+/// transaction as a payload
+pub type InterestsForTransactions = HashMap<TransactionsIdType, InterestForTransaction>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////   STRUCTS   ////////////////////////////////////////////////
@@ -43,22 +49,6 @@ pub struct Wallet {
     charge_priority: i16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ParameterData {
-    Integer(ParameterValueInteger),
-    Decimal(ParameterValueDecimal),
-    Date(ParameterValueDate),
-    Datetime(ParameterValueDateTime),
-    Range(ParameterValueRange),
-    Unset,
-}
-
-//  HashMap de todos los intereses para todas las transacciones linkeado a un wallet
-//  Contiene el accounts_id, wallet_statements compuesto por un hashmap con todas las transacciones
-// de credito para ese wallets id, y el calculo de intereses total
-
-pub type AccountsStatementsResult = Vec<AccountStatementsResult>;
-
 pub struct AccountStatementsResult {
     pub accounts_id: AccountIdType,
     pub wallet_statements: HashMap<WalletIdType, WalletStatementsResult>
@@ -87,6 +77,99 @@ pub struct WalletStatementsResult {
     transactions_details: InterestsForTransactions,
 }
 
+/// Struct that contains interests details for a single transaction
+#[derive(Debug, Clone, Copy)]
+pub struct InterestForTransaction {
+    /// Transaction amount
+    transaction_amount: Decimal,
+    /// Transaction amount relative to the payments made by the client. Ex: if purchase is fully covered by payment, effective_transaction_amount will be zero
+    effective_transaction_amount: Decimal,
+    /// True if transaction was a purchase, false if it was a payment
+    is_transaction_purchase: bool,
+    /// Financial Daily interest rate determined by the type of purchased
+    daily_interest_rate: Decimal,
+    /// Total financial daily interest for the purchase
+    total_daily_interest: Decimal,
+    /// True if client is in penalty, false if they're not
+    //  TODO: RENOMBRAR A DEFAULT
+    is_client_in_penalty: bool,
+    /// Penalty interest rate
+    penalty_interest_rate: Decimal,
+    /// Total penalty interest for the purchase transaction
+    total_penalty_interest: Decimal,
+    /// Date when the transaction took place
+    balances_date: NaiveDate
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////   ENUMS   //////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ParameterData {
+    Integer(ParameterValueInteger),
+    Decimal(ParameterValueDecimal),
+    Date(ParameterValueDate),
+    Datetime(ParameterValueDateTime),
+    Range(ParameterValueRange),
+    Unset,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ClientBalanceCaseType{
+    UpToDate,
+    MinimumCovered,
+    Penalty,
+    NoPayment,
+    TwoDaysGrace,
+    Undetermined
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////   IMPLEMENTATIONS   ////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+impl FromRow for Account {
+    fn from_row(row: Row) -> Self
+        where
+            Self: Sized,
+    {
+        Account {
+            id: extract_value!(row, "ID", "Account"),
+            number: extract_value!(row, "number", "Account"),
+            products_id: extract_value!(row, "products_ID", "Account"),
+            blocks_id: extract_value!(row, "blocks_ID", "Account"),
+            fraud_groups_id: extract_value!(row, "fraud_groups_ID", "Account"),
+            affinity_groups_id: extract_value!(row, "affinity_groups_ID", "Account"),
+            wallets: HashMap::with_capacity(12),
+            parameters: None,
+            statement_day: extract_value!(row, "statement_day", "Account"),
+            credit_amount: extract_value!(row, "credit_amount", "Account"),
+            future_balance_coefficient: extract_value!(row, "future_balance_coefficient", "Account"),
+            grace_period_coefficient: extract_value!(row, "grace_period_coefficient", "Account"),
+            withdrawal_coefficient: extract_value!(row, "withdrawal_coefficient", "Account"),
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError>
+        where
+            Self: Sized,
+    {
+        unimplemented!()
+    }
+}
+
+impl Wallet {
+    //  Creates a ghost wallet from the wallets_id and currencies id type
+    pub fn ghost_with_id(id: WalletIdType, currencies_id: CurrenciesIdType) -> Self {
+        Self {
+            id,
+            currencies_id,
+            charge_priority: 0,
+        }
+    }
+}
+
 impl WalletStatementsResult {
     /// Creates a new WalletStatementsResult struct.
     ///
@@ -109,7 +192,7 @@ impl WalletStatementsResult {
             total_penalty_interest: Decimal::zero(),
             statement_day,
             transactions_details: interests_for_transaction,
-            }
+        }
     }
 
     //  Getters and setters
@@ -164,34 +247,6 @@ impl WalletStatementsResult {
     pub fn set_statement_day(&mut self, statement_day: NaiveDate) {
         self.statement_day = statement_day
     }
-}
-
-/// HashMap that takes a TransactionsIdType as a key and InterestForTransaction for a single
-/// transaction as a payload
-pub type InterestsForTransactions = HashMap<TransactionsIdType, InterestForTransaction>;
-
-/// Struct that contains interests details for a single transaction
-#[derive(Debug, Clone, Copy)]
-pub struct InterestForTransaction {
-    /// Transaction amount
-    transaction_amount: Decimal,
-    /// Transaction amount relative to the payments made by the client. Ex: if purchase is fully covered by payment, effective_transaction_amount will be zero
-    effective_transaction_amount: Decimal,
-    /// True if transaction was a purchase, false if it was a payment
-    is_transaction_purchase: bool,
-    /// Financial Daily interest rate determined by the type of purchased
-    daily_interest_rate: Decimal,
-    /// Total financial daily interest for the purchase
-    total_daily_interest: Decimal,
-    /// True if client is in penalty, false if they're not
-    //  TODO: RENOMBRAR A DEFAULT
-    is_client_in_penalty: bool,
-    /// Penalty interest rate
-    penalty_interest_rate: Decimal,
-    /// Total penalty interest for the purchase transaction
-    total_penalty_interest: Decimal,
-    /// Date when the transaction took place
-    balances_date: NaiveDate
 }
 
 impl InterestForTransaction{
@@ -351,51 +406,6 @@ impl InterestForTransaction{
         } else {
             self.set_total_daily_interest(Decimal::zero());
             self.set_total_penalty_interest(Decimal::zero());
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////   IMPLEMENTATIONS   ////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-impl FromRow for Account {
-    fn from_row(row: Row) -> Self
-        where
-            Self: Sized,
-    {
-        Account {
-            id: extract_value!(row, "ID", "Account"),
-            number: extract_value!(row, "number", "Account"),
-            products_id: extract_value!(row, "products_ID", "Account"),
-            blocks_id: extract_value!(row, "blocks_ID", "Account"),
-            fraud_groups_id: extract_value!(row, "fraud_groups_ID", "Account"),
-            affinity_groups_id: extract_value!(row, "affinity_groups_ID", "Account"),
-            wallets: HashMap::with_capacity(12),
-            parameters: None,
-            statement_day: extract_value!(row, "statement_day", "Account"),
-            credit_amount: extract_value!(row, "credit_amount", "Account"),
-            future_balance_coefficient: extract_value!(row, "future_balance_coefficient", "Account"),
-            grace_period_coefficient: extract_value!(row, "grace_period_coefficient", "Account"),
-            withdrawal_coefficient: extract_value!(row, "withdrawal_coefficient", "Account"),
-        }
-    }
-
-    fn from_row_opt(_row: Row) -> Result<Self, FromRowError>
-        where
-            Self: Sized,
-    {
-        unimplemented!()
-    }
-}
-
-impl Wallet {
-    //  Creates a ghost wallet from the wallets_id and currencies id type
-    pub fn ghost_with_id(id: WalletIdType, currencies_id: CurrenciesIdType) -> Self {
-        Self {
-            id,
-            currencies_id,
-            charge_priority: 0,
         }
     }
 }

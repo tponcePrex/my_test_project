@@ -6,7 +6,12 @@ use mysql_common::bigdecimal03::Zero;
 use mysql_common::chrono::NaiveDate;
 use mysql_common::rust_decimal::Decimal;
 use crate::data::queries::TransactionConfirmed;
-use crate::datatypes::structs::{InterestForTransaction, InterestsForTransactions, WalletStatementsResult};
+use crate::datatypes::structs::{
+    ClientBalanceCaseType,
+    InterestForTransaction,
+    InterestsForTransactions,
+    WalletStatementsResult
+};
 use crate::new_error;
 use crate::utils::MyResult;
 
@@ -171,25 +176,6 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
 ///////////////////////////////////////   FUNCTIONS   //////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Debug, PartialEq)]
-pub enum ClientBalanceCaseType{
-    UpToDate,
-    MinimumCovered,
-    Penalty,
-    NoPayment,
-    TwoDaysGrace,
-    Undetermined
-}
-
-/*
-    Determinar el caso del cliente:
-    1-obtener todas las compras
-    2-obtener el balance anterior
-    3-obtener todos los pagos
-    4-hacer balance_nuevo = compras + balance_anterior + pagos (pagos es negativo)
-    5-obtener el minimo
-    6-determinar el caso en base al minimo, balance y/o pago
-    */
 fn calculate_client_balance_case(
     purchases: &Decimal,
     payments: &Decimal,
