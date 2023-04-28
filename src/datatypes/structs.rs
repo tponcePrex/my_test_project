@@ -99,7 +99,7 @@ pub struct InterestForTransaction {
     /// Total financial daily interest for the purchase
     total_daily_interest: Decimal,
     /// True if client is in penalty, false if they're not
-    // RENOMBRAR A DEFAULT
+    //  TODO: RENOMBRAR A DEFAULT
     is_client_in_penalty: bool,
     /// Penalty interest rate
     penalty_interest_rate: Decimal,
@@ -189,7 +189,7 @@ impl InterestForTransaction{
             //  Decreasing the value of payments and setting the effective_transaction_amount to zero
             *payments += self.get_effective_transaction_amount();
             self.set_effective_transaction_amount(Decimal::zero());
-            println!("New payments value: {}", payments);
+            println!("Purchase covered");
 
         } else if ( payments.abs() < self.get_effective_transaction_amount() )
             && ( payments.abs() > Decimal::zero() ) {
@@ -198,15 +198,13 @@ impl InterestForTransaction{
             effective_transaction_amount += *payments;
             self.set_effective_transaction_amount(effective_transaction_amount);
             *payments = Decimal::zero();
-            println!("New payments value: {}", payments);
+            println!("Effective debt: {}", effective_transaction_amount);
 
         } else {
             //  PLACEHOLDER TO UNDERSTAND LOGIC
             //  payments is zero, meaning there was no payment, or there's no payment amount left to cover any more purchases
             //  Making sure payments is zero
             *payments = Decimal::zero();
-            println!("Payments value: {}", payments);
-
         }
 
         //  If the effective value for the transaction is greater than zero (debt not cancelled), calculate interests

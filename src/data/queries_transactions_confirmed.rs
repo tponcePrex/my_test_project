@@ -21,7 +21,7 @@ use crate::utils::MyResult;
 //  @TODO: Determine final client account balance
 
 
-pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
+pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -> MyResult<()>{
 
 
     //  @TODO ASK: does wallet_id change for a different currency and same client?
@@ -53,14 +53,14 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
     let wallets_id: u16 = 129;
     let stmt = format!(
         "SELECT * FROM transactions_confirmed WHERE wallets_ID = {} ORDER BY ID ASC", wallets_id);
+    //  TODO: limitar fechas de fetch en el SELECT
+    //  @TODO: filtrar cuotas futuras a la fecha de analisis
     let transactions = conn.query::<TransactionConfirmed, _>(stmt)
         .await
         .map_err(|e| {
             println!("{}", e);
             new_error!(e.to_string(), ErrorTypes::DbConn)
         })?;
-
-    //  @TODO: filtrar cuotas futuras a la fecha de analisis
 
     //  PLACEHOLDERS
     //  Today's 2023/05/30 for interests calculations
@@ -71,8 +71,11 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
     let penalty_interest_rate = Decimal::new(85, 2) / Decimal::new(365, 0);
 
     let previous_balance = Decimal::new(0, 0);
-    let mut effective_payments = Decimal::new(0, 0);
-    let mut payments = Decimal::new(0, 0);
+    //let mut payments = Decimal::new(0, 0);
+    //let mut effective_payments = Decimal::new(0, 0);
+    //  Payment from console params
+    let mut payments = env_payment;
+    let mut effective_payments = env_payment;
     let mut purchases = Decimal::new(0, 0);
 
     let interests_for_transaction: InterestsForTransactions = HashMap::with_capacity(transactions.len());
@@ -84,10 +87,6 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
         total_interests: interests_for_transaction
     };
 
-
-    //  Calculate client's balance case
-    let minimum_payment = Decimal::new(4000, 0);
-
     //  Calculation total value of payments and purchases
     for transaction in &transactions {
         if transaction.debit_credit == -1 {
@@ -98,6 +97,8 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
         }
     }
 
+    let minimum_payment = purchases * Decimal::new(25, 2);
+
     //  Determine the balance case for this wallets_id
     let client_case = calculate_client_balance_case(
         &purchases,
@@ -105,10 +106,6 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
         &previous_balance,
         &minimum_payment
     );
-
-    // let mut is_minimum_covered = false;
-    //
-    // if Decimal::zero() - payments >= minimum_payment { is_minimum_covered = true }
 
     let mut total_daily_interests = Decimal::zero();
     let mut total_penalty_interests = Decimal::zero();
@@ -151,7 +148,7 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
         if interest_for_transaction.get_is_transaction_purchase() {
             interest_for_transaction.calculate_daily_interest_rate(
                 &mut effective_payments,
-                &ClientBalanceCaseType::NoPayment,
+                &client_case,
                 &statement_day
             );
         }
@@ -171,12 +168,19 @@ pub async fn get_transactions_confirmed(conn: &mut Conn) -> MyResult<()>{
         wallet_statements.total_interests.insert(transaction.id, interest_for_transaction);
     }
 
+    let total_balance = total_penalty_interests + total_daily_interests + purchases + payments;
+
     println!("Purchases: {}", purchases);
     println!("Payments: {}", payments);
     println!("Effective payments: {}", effective_payments);
     println!("Minimum payment: {}", minimum_payment);
     println!("Total daily interests: {}", total_daily_interests);
     println!("Total penalty interests: {}", total_penalty_interests);
+    println!(" ");
+    println!("Client case: {:?}", client_case);
+    println!(" ");
+    println!(" ");
+    println!("Total balance: {}", total_balance);
 
     /*
     Calcular intereses:
