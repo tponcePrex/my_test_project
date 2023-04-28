@@ -164,32 +164,6 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
     println!(" ");
     println!("Total balance: {}", total_balance);
 
-    /*
-    Calcular intereses:
-    1-obtener todas las compras ordenadas por fecha
-    2-obtener todos los pagos ordenados por fecha
-    3-obtener el balance anterior
-    4-sumar los pagos hechos dentro del periodo de gracia
-    5-determinar si el total de pagos es igual o mayor al total de compras + balance anterior
-        A-si el pago es mayor a compras + balance anterior, entonces esta saldado, mover resultado al balance actual
-        B-si es menor entonces van a haber intereses (ver anexo B)
-    6-definir el balance total
-    7-determinar el caso del cliente en base a balance total
-
-    B-Intereses:
-    1-determinar si el pago es mayor al minimo, si no es, el cliente esta en penalty
-    2-cancelar las deudas desde la mas vieja hasta la mas nueva
-    3-al restante, ir por cada transaccion calculando intereses segun los dias transcurridos
-    4-sumar intereses financieros
-     */
-
-
-
-
-    // println!("Expenses: {} \nDebt payed: {} \n", positive_amount, negative_amount);
-    // println!("Balance: {} \nBalance Case: {:?} \n", balance, client_case);
-
-
     Ok(())
 }
 
