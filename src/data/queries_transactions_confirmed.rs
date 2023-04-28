@@ -15,44 +15,12 @@ use crate::utils::MyResult;
 ///////////////////////////////////////   QUERIES   ////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//  @TODO: Fetch daily interest rate
-//  @TODO: Calculate interest for individual charges
-//  @TODO: Add all interests and add penalty value if applicable
-//  @TODO: Determine final client account balance
-
-
 pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -> MyResult<()>{
-
-
-    //  @TODO ASK: does wallet_id change for a different currency and same client?
-    //  Cada wallets_id esta linkeado a una moneda particular, es independiente
-    //  @TODO ASK: do different currencies for a same client have different wallets_id?
-    //  Ya esta
-    //  @TODO ASK: do we have to develop for interests in different currencies separately or all of them together?
-    //  Y aesta
-    //  @TODO ASK: are those the correct values for the placeholders?
-    //  Ya esta
-    //  @TODO ASK: check if it is convenient to calculate interest for each purchase separately and add them together
-    //  Ya esta
-
-    //  @TODO ASK: que transaction_codes_id para transaction_categories_id = 4 se tienen que usar para calcular esta mierda
-
-
-    //  My calculations are to notify the client how much he'll owe if he doesn't pay
-    //  The result of my calculations wont be the charges he owes
-    //  Para linkear intereses a las compras usar un hashmap, con key id de compra
-    //  default_interest es interes por mora
-    //  daily interest rate: 65%/365
-    //  penalty interest rate: %85/365
-    //  Peroido de gracia es 7 dias en principio
-    //  Amount es el valor final que tengo que analizar
-
-    //  Si el cliente no paga hasta el proximo cierre, va a tener ciertos intereses, que es lo que
-    // tengo que calcular aca
 
     let wallets_id: u16 = 129;
     let stmt = format!(
         "SELECT * FROM transactions_confirmed WHERE wallets_ID = {} ORDER BY ID ASC", wallets_id);
+    //  @TODO ASK: que transaction_codes_id para transaction_categories_id = 4 se tienen que usar para calcular esta mierda
     //  TODO: limitar fechas de fetch en el SELECT
     //  @TODO: filtrar cuotas futuras a la fecha de analisis
     let transactions = conn.query::<TransactionConfirmed, _>(stmt)
@@ -74,41 +42,50 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
     //let mut payments = Decimal::new(0, 0);
     //let mut effective_payments = Decimal::new(0, 0);
     //  Payment from console params
-    let mut payments = env_payment;
-    let mut effective_payments = env_payment;
-    let mut purchases = Decimal::new(0, 0);
 
-    let interests_for_transaction: InterestsForTransactions = HashMap::with_capacity(transactions.len());
+    let mut transaction_details: InterestsForTransactions = HashMap::with_capacity(transactions.len());
 
-    let mut wallet_statements = WalletStatementsResult{
-        balance: Decimal::zero(),
-        previous_balance,
-        minimum_payment: Decimal::zero(),
-        total_interests: interests_for_transaction
-    };
+    let mut wallet_statements = WalletStatementsResult::new(
+        transaction_details.clone(),
+        statement_day,
+        previous_balance
+    );
+
+    let payments = &mut wallet_statements.get_total_payments();
+    let mut effective_payments = wallet_statements.get_total_payments();
+    let purchases = &mut wallet_statements.get_total_purchases();
+
+    //  TODO: remove, this variable is for testing only
+    *payments = env_payment;
+    effective_payments = env_payment;
+
+    //let mut purchases = Decimal::new(0, 0);
 
     //  Calculation total value of payments and purchases
     for transaction in &transactions {
         if transaction.debit_credit == -1 {
             effective_payments += transaction.amount;
-            payments += transaction.amount;
+            *payments += transaction.amount;
         } else if transaction.debit_credit == 1 {
-            purchases += transaction.amount;
+            *purchases += transaction.amount;
         }
     }
 
-    let minimum_payment = purchases * Decimal::new(25, 2);
+    wallet_statements.set_total_payments(*payments);
+    wallet_statements.set_total_purchases(*purchases);
+
+    let minimum_payment = *purchases * Decimal::new(25, 2);
 
     //  Determine the balance case for this wallets_id
     let client_case = calculate_client_balance_case(
-        &purchases,
+        purchases,
         &effective_payments,
         &previous_balance,
         &minimum_payment
     );
 
-    let mut total_daily_interests = Decimal::zero();
-    let mut total_penalty_interests = Decimal::zero();
+    let total_daily_interests = &mut wallet_statements.get_total_daily_interest();
+    let total_penalty_interests = &mut wallet_statements.get_total_penalty_interest();
 
     //  Iterate through the transactions vector
     for transaction in transactions {
@@ -149,12 +126,13 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
             interest_for_transaction.calculate_daily_interest_rate(
                 &mut effective_payments,
                 &client_case,
-                &statement_day
+                &wallet_statements.get_statement_day()
             );
         }
 
-        total_daily_interests += interest_for_transaction.get_total_daily_interest();
-        total_penalty_interests += interest_for_transaction.get_total_penalty_interest();
+        //  Updating both financial and penalty interests in wallet_statements
+        *total_daily_interests += interest_for_transaction.get_total_daily_interest();
+        *total_penalty_interests += interest_for_transaction.get_total_penalty_interest();
 
         println!("{}  -------------------------", interest_for_transaction.get_balances_date());
         println!("Transaction amount: {}", interest_for_transaction.get_transaction_amount());
@@ -165,10 +143,14 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
         println!("Penalty interest rate: {}", interest_for_transaction.get_penalty_interest_rate());
         println!(" ");
 
-        wallet_statements.total_interests.insert(transaction.id, interest_for_transaction);
+        //  Editing the HashMap created before this iterator, to insert it into wallet_statements later
+        transaction_details.insert(transaction.id, interest_for_transaction);
     }
 
-    let total_balance = total_penalty_interests + total_daily_interests + purchases + payments;
+    //  Inserting the transaction_details HashMap into wallet_statements
+    wallet_statements.set_transactions_details(transaction_details);
+
+    let total_balance = *total_penalty_interests + *total_daily_interests + *purchases + *payments;
 
     println!("Purchases: {}", purchases);
     println!("Payments: {}", payments);
@@ -261,13 +243,3 @@ fn calculate_client_balance_case(
     //  TwoDaysGrace is only available for Uruguay
     //  TODO: implement twoDaysGrace for Uruguay
 }
-
-pub fn calculate_days_amount(purchase_date: &NaiveDate, statement_day: &NaiveDate) -> Decimal{
-
-    //  Amount of days between the specific purchase and the statement day for the calculation
-    let days_amount = statement_day.signed_duration_since(*purchase_date).num_days();
-
-    //  Returning amount of days as Decimal
-    Decimal::new(days_amount, 0)
-}
-

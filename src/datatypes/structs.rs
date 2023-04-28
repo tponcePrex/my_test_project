@@ -8,7 +8,7 @@ use crate::datatypes::system_datatypes::{AccountIdType, AccountParameterIdType, 
 use serde::{Deserialize, Serialize};
 use tokio::io::Interest;
 use crate::data::queries::TransactionConfirmed;
-use crate::data::queries_transactions_confirmed::{calculate_days_amount, ClientBalanceCaseType};
+use crate::data::queries_transactions_confirmed::ClientBalanceCaseType;
 use crate::extract_value;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -61,31 +61,116 @@ pub type AccountsStatementsResult = Vec<AccountStatementsResult>;
 
 pub struct AccountStatementsResult {
     pub accounts_id: AccountIdType,
-    pub wallet_statements: HashMap<WalletIdType, WalletStatementsResult>,
-    pub total_interest_for_wallet: TotalInterestForWallet,
+    pub wallet_statements: HashMap<WalletIdType, WalletStatementsResult>
 }
 
-//  Global statements previous and current for the wallet_id
+/// Struct that contains all relevant data for interests calculations, balances, transactions
+/// details and dates and minimum payment values
 pub struct WalletStatementsResult {
-    pub balance: Decimal,
-    pub previous_balance: Decimal,
-    pub minimum_payment: Decimal,
-    pub total_interests: InterestsForTransactions
-    //  Incluir TotalInterestForWallet aca y sacar de AccountStatementsResult
+    ///  Current balance for the linked wallets_id
+    balance: Decimal,
+    /// Previous balance for the linked wallets_id
+    previous_balance: Decimal,
+    /// Minimum payment for the current statement
+    minimum_payment: Decimal,
+    /// Sum of all the purchases for the calculated period
+    total_purchases: Decimal,
+    /// Sum of all the payments for the calculated period
+    total_payments: Decimal,
+    /// Total financial interests for the calculated period
+    total_daily_interest: Decimal,
+    /// Total penalty interests for the calculated period
+    total_penalty_interest: Decimal,
+    /// Statement day to calculate the (potential) interests
+    statement_day: NaiveDate,
+    /// Total interests, sum of all the interests
+    transactions_details: InterestsForTransactions,
 }
 
-//  Total de intereses esta compuesto por el total de intereses diario, total de intereses de
-// penalty (mora), y la fecha de cierre para la cual se esta calculando esos intereses
-pub struct TotalInterestForWallet {
-    pub total_daily_interest: Decimal,
-    pub total_penalty_interest: Decimal,
-    pub statement_day: NaiveDate
+impl WalletStatementsResult {
+    /// Creates a new WalletStatementsResult struct.
+    ///
+    ///Parameters: InterestForTransactions HashMap, statement_day with NaiveDate format,
+    /// and previous_balance with Decimal format
+    ///
+    /// Returns: a new instance of WalletStatementsResult
+    pub fn new(
+        interests_for_transaction: InterestsForTransactions,
+        statement_day: NaiveDate,
+        previous_balance: Decimal
+    ) -> Self {
+        WalletStatementsResult {
+            balance: Decimal::zero(),
+            previous_balance,
+            minimum_payment: Decimal::zero(),
+            total_purchases: Decimal::zero(),
+            total_payments: Decimal::zero(),
+            total_daily_interest: Decimal::zero(),
+            total_penalty_interest: Decimal::zero(),
+            statement_day,
+            transactions_details: interests_for_transaction,
+            }
+    }
+
+    //  Getters and setters
+    pub fn get_balance(&self) -> Decimal { self.balance }
+    pub fn set_balance(&mut self, balance: Decimal) {
+        self.balance = balance
+    }
+
+    pub fn get_previous_balance(&self) -> Decimal { self.previous_balance }
+    pub fn set_previous_balance(&mut self, previous_balance: Decimal) {
+        self.previous_balance = previous_balance
+    }
+
+    pub fn get_minimum_payment(&self) -> Decimal { self.minimum_payment }
+    pub fn set_minimum_payment(&mut self, minimum_payment: Decimal) {
+        self.minimum_payment = minimum_payment
+    }
+
+    pub fn get_total_purchases(&self) -> Decimal { self.total_purchases }
+    pub fn set_total_purchases(&mut self, total_purchases: Decimal) {
+        self.total_purchases = total_purchases
+    }
+
+    pub fn get_total_payments(&self) -> Decimal { self.total_payments }
+    pub fn set_total_payments(&mut self, total_payments: Decimal) {
+        self.total_payments = total_payments
+    }
+
+    pub fn get_transactions_details(&self) -> &InterestsForTransactions { &self.transactions_details }
+    pub fn set_transactions_details(&mut self, total_interests: InterestsForTransactions) {
+        self.transactions_details = total_interests
+    }
+
+    //  Direct getters and setters for WalletStatementsResult sub-members
+    pub fn get_total_daily_interest(&self) -> Decimal {
+        self.total_daily_interest
+    }
+    pub fn set_total_daily_interest(&mut self, total_daily_interest: Decimal) {
+        self.total_daily_interest = total_daily_interest
+    }
+
+    pub fn get_total_penalty_interest(&self) -> Decimal {
+        self.total_penalty_interest
+    }
+    pub fn set_total_penalty_interest(&mut self, total_penalty_interest: Decimal) {
+        self.total_penalty_interest = total_penalty_interest
+    }
+
+    pub fn get_statement_day(&self) -> NaiveDate {
+        self.statement_day
+    }
+    pub fn set_statement_day(&mut self, statement_day: NaiveDate) {
+        self.statement_day = statement_day
+    }
 }
 
-//  HashMap con key = transaction_id y payload = intereses para esa transaccion
+/// HashMap that takes a TransactionsIdType as a key and InterestForTransaction for a single
+/// transaction as a payload
 pub type InterestsForTransactions = HashMap<TransactionsIdType, InterestForTransaction>;
 
-//  Datos de intereses para cada transaccion en base a la cantidad de dias
+/// Struct that contains interests details for a single transaction
 #[derive(Debug, Clone, Copy)]
 pub struct InterestForTransaction {
     /// Transaction amount
@@ -110,6 +195,12 @@ pub struct InterestForTransaction {
 }
 
 impl InterestForTransaction{
+    /// Creates a new InterestForTransaction struct.
+    ///
+    ///Parameters: TransactionConfirmed struct, daily_interest_rate in Decimal format,
+    /// penalty_interest_rate with Decimal format and client_case ClientBalanceCaseType enum value
+    ///
+    /// Returns: a new instance of InterestForTransaction
     pub fn new(
         s: &TransactionConfirmed,
         daily_interest_rate: &Decimal,
@@ -176,6 +267,13 @@ impl InterestForTransaction{
         self.balances_date = balances_date
     }
 
+    /// Calculates the daily interest rate for a single transaction.
+    ///
+    ///Parameters: payments value in Decimal format, client_case ClientBalanceCaseType enum value,
+    /// statement_date in NaiveDate format
+    ///
+    /// Returns: nothing. Parameters that need values modification are received as mutable
+    /// references, including the InterestForTransaction calling struct itself
     pub fn calculate_daily_interest_rate(
         &mut self,
         payments: &mut Decimal,
@@ -209,6 +307,8 @@ impl InterestForTransaction{
 
         //  If the effective value for the transaction is greater than zero (debt not cancelled), calculate interests
         if self.get_effective_transaction_amount() > Decimal::zero() {
+            //  Calculate amount of days from statement_day to transaction date
+            let days_amount = Decimal::new((*statement_day - self.get_balances_date()).num_days(), 0);
             //  Calculate interest according to the client's balance case
             match client_case {
                 ClientBalanceCaseType::UpToDate => {
@@ -218,11 +318,6 @@ impl InterestForTransaction{
                 },
                 ClientBalanceCaseType::NoPayment => {
                     //  If no payment was registered, both financial and penalty interests apply
-                    let days_amount = calculate_days_amount(
-                        &self.get_balances_date(),
-                        statement_day
-                    );
-
                     self.set_total_daily_interest(
                         self.get_effective_transaction_amount() * days_amount * self.get_daily_interest_rate()
                     );
@@ -232,22 +327,12 @@ impl InterestForTransaction{
                 },
                 ClientBalanceCaseType::MinimumCovered => {
                     //  If client has minimum payment covered, only financial interests apply
-                    let days_amount = calculate_days_amount(
-                        &self.get_balances_date(),
-                        statement_day
-                    );
-
                     self.set_total_daily_interest(
                         self.get_effective_transaction_amount() * days_amount * self.get_daily_interest_rate()
                     );
                 },
                 ClientBalanceCaseType::Penalty => {
                     //  If client is on penalty, both financial and penalty interests apply
-                    let days_amount = calculate_days_amount(
-                        &self.get_balances_date(),
-                        statement_day
-                    );
-
                     self.set_total_daily_interest(
                         self.get_effective_transaction_amount() * days_amount * self.get_daily_interest_rate()
                     );
