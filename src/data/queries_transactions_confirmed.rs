@@ -89,8 +89,8 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
         &minimum_payment
     );
 
-    let total_daily_interests = &mut wallet_statements.get_total_daily_interest();
-    let total_penalty_interests = &mut wallet_statements.get_total_penalty_interest();
+    let mut total_daily_interests = wallet_statements.get_total_daily_interest();
+    let mut total_penalty_interests = wallet_statements.get_total_penalty_interest();
 
     //  Iterate through the transactions vector
     for transaction in transactions {
@@ -133,11 +133,11 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
                 &client_case,
                 &wallet_statements.get_statement_day()
             );
+            //  Updating both financial and penalty interests in wallet_statements
+            total_daily_interests += interest_for_transaction.get_total_daily_interest();
+            total_penalty_interests += interest_for_transaction.get_total_penalty_interest();
         }
 
-        //  Updating both financial and penalty interests in wallet_statements
-        *total_daily_interests += interest_for_transaction.get_total_daily_interest();
-        *total_penalty_interests += interest_for_transaction.get_total_penalty_interest();
 
         println!("{}  -------------------------", interest_for_transaction.get_balances_date());
         println!("Transaction amount: {}", interest_for_transaction.get_transaction_amount());
@@ -155,14 +155,19 @@ pub async fn get_transactions_confirmed(conn: &mut Conn, env_payment: Decimal) -
     //  Inserting the transaction_details HashMap into wallet_statements
     wallet_statements.set_transactions_details(transaction_details);
 
-    let total_balance = *total_penalty_interests + *total_daily_interests + *purchases + *payments;
+    wallet_statements.set_total_daily_interest(total_daily_interests);
+    wallet_statements.set_total_penalty_interest(total_penalty_interests);
+
+    let total_balance = total_penalty_interests + total_daily_interests + *purchases + *payments;
+
+    wallet_statements.set_balance(total_balance);
 
     println!("Purchases: {}", purchases);
     println!("Payments: {}", payments);
     println!("Effective payments: {}", effective_payments);
     println!("Minimum payment: {}", minimum_payment);
-    println!("Total daily interests: {}", total_daily_interests);
-    println!("Total penalty interests: {}", total_penalty_interests);
+    println!("Total daily interests: {}", wallet_statements.get_total_daily_interest());
+    println!("Total penalty interests: {}", wallet_statements.get_total_penalty_interest());
     println!(" ");
     println!("Client case: {:?}", client_case);
     println!(" ");
