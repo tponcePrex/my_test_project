@@ -6,7 +6,7 @@ use mysql_async::prelude::Queryable;
 use mysql_async::prelude::FromRow;
 use mysql_common::bigdecimal03::Zero;
 use mysql_common::chrono;
-use mysql_common::chrono::{Datelike, NaiveDate};
+use mysql_common::chrono::{Datelike, NaiveDate, NaiveDateTime};
 use mysql_common::row::convert::FromRowError;
 use mysql_common::row::Row;
 use mysql_common::rust_decimal::Decimal;
@@ -245,6 +245,65 @@ pub async fn get_transaction_codes(conn: &mut Conn) -> MyResult<()> {
     }
 
     Ok(())
+}
+
+pub async fn get_last_statements(conn: &mut Conn) {
+
+    let stmt = "SELECT acc.accounts_id AS account_accounts_id, \
+    acc.balances_date AS account_balances_date, \
+    acc.wallets_id AS account_wallets_id, \
+    acc.balance AS account_balance, \
+    acc.created_at AS account_created_at, \
+    acc.updated_at AS account_updated_at, \
+    wal.balances_date AS wallet_balances_date, \
+    wal.balance AS wallet_balance, \
+    wal.created_at AS wallet_created_at, \
+    wal.updated_at AS wallet_updated_at \
+    FROM account_statements AS acc JOIN wallet_statements AS wal \
+    USING (accounts_ID, accounts_id) WHERE accounts_id IN (2)".to_string();
+    let results = conn.query::<LastStatements, _>(
+        stmt
+    ).await.map_err(|e| {
+        println!("{}", e);
+        new_error!(e.to_string(), ErrorTypes::DbConn)
+    }).unwrap();
+
+    for result in results {
+        println!("{:?}", result);
+
+}
+
+#[derive(Debug)]
+pub(crate) struct LastStatements{
+    accounts_id: AccountIdType,
+    wallets_id: WalletIdType,
+    account_balances_date: NaiveDate,
+    account_balance: Decimal,
+    account_created_at: NaiveDateTime,
+    account_updated_at: NaiveDateTime,
+    wallet_balances_date: NaiveDate,
+    wallet_balance: Decimal,
+    wallet_created_at: NaiveDateTime,
+    wallet_updated_at: NaiveDateTime
+}
+
+impl FromRow for LastStatements{
+    fn from_row(row: Row) -> Self where Self: Sized {
+        Self{
+            accounts_id: extract_value!(row, "account_accounts_id", "LastStatement", AccountIdType),
+            wallets_id: extract_value!(row, "account_wallets_id", "LastStatement", WalletIdType),
+            account_balances_date: extract_value!(row, "account_balances_date", "LastStatement", NaiveDate),
+            account_balance: extract_value!(row, "account_balance", "LastStatement", Decimal),
+            account_created_at: extract_value!(row, "account_created_at", "LastStatement", NaiveDateTime),
+            account_updated_at: extract_value!(row, "account_updated_at", "LastStatement", NaiveDateTime),
+            wallet_balances_date: extract_value!(row, "wallet_balances_date", "LastStatement", NaiveDate),
+            wallet_balance: extract_value!(row, "wallet_balance", "LastStatement", Decimal),
+            wallet_created_at: extract_value!(row, "wallet_created_at", "LastStatement", NaiveDateTime),
+            wallet_updated_at: extract_value!(row, "wallet_updated_at", "LastStatement", NaiveDateTime)
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
