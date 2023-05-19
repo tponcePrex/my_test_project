@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use mysql_common::bigdecimal03::Zero;
-use mysql_common::chrono::NaiveDate;
+use mysql_common::chrono::{NaiveDate, NaiveDateTime};
 use mysql_common::row::convert::{FromRow, FromRowError};
 use mysql_common::row::Row;
 use mysql_common::rust_decimal::Decimal;
@@ -44,9 +44,9 @@ pub struct Account {
 
 #[derive(Serialize, Debug, Copy, Clone, Default)]
 pub struct Wallet {
-    id: WalletIdType,
-    currencies_id: CurrenciesIdType,
-    charge_priority: i16,
+    pub id: WalletIdType,
+    pub currencies_id: CurrenciesIdType,
+    pub charge_priority: i16,
 }
 
 pub struct AccountStatementsResult {
@@ -99,6 +99,47 @@ pub struct InterestForTransaction {
     total_penalty_interest: Decimal,
     /// Date when the transaction took place
     balances_date: NaiveDate
+}
+
+#[derive(Clone, Debug)]
+pub struct AccountData {
+    pub id: AccountIdType,
+    pub last_account_statement: Option<LastAccountStatement>,
+    pub wallets_data: HashMap<WalletIdType, (Wallet, Option<LastWalletStatement>)>, // TODO Implement this
+}
+
+#[derive(Debug, Clone)]
+pub struct LastAccountStatement {
+    pub accounts_id: AccountIdType,
+    pub balances_date: NaiveDate,
+    pub wallets_id: WalletIdType,
+    pub balance: Decimal,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime
+}
+
+#[derive(Debug, Clone)]
+pub struct LastWalletStatement {
+    pub wallet_id: WalletIdType,
+    pub balances_date: NaiveDate,
+    pub accounts_id: AccountIdType,
+    pub balance: Decimal,
+    pub minimum_payment: Decimal,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime
+}
+
+#[derive(Debug, Clone)]
+pub struct WalletData {
+    pub wallets_id: WalletIdType,
+    pub currencies_id: CurrenciesIdType,
+    pub charge_priority: i16,
+    pub balances_date: NaiveDate,
+    pub accounts_id: AccountIdType,
+    pub balance: Decimal,
+    pub minimum_payment: Decimal,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,6 +207,14 @@ impl Wallet {
             id,
             currencies_id,
             charge_priority: 0,
+        }
+    }
+
+    pub fn new_empty() -> Self{
+        Self{
+            id: 0,
+            currencies_id: 0,
+            charge_priority: 0
         }
     }
 }
@@ -408,4 +457,89 @@ impl InterestForTransaction{
             self.set_total_penalty_interest(Decimal::zero());
         }
     }
+}
+
+impl FromRow for WalletData {
+    fn from_row(row: Row) -> Self where Self: Sized {
+        Self{
+            wallets_id: extract_value!(row, "ID", "WalletData", WalletIdType),
+            currencies_id: extract_value!(row, "currencies_ID", "WalletData", CurrenciesIdType),
+            charge_priority: extract_value!(row, "charge_priority", "WalletData", i16),
+            balances_date: extract_value!(row, "balances_date", "WalletData", NaiveDate),
+            accounts_id: extract_value!(row, "accounts_ID", "WalletData", AccountIdType),
+            balance: extract_value!(row, "balance", "WalletData", Decimal),
+            minimum_payment: extract_value!(row, "minimum_payment", "WalletData", Decimal),
+            created_at: extract_value!(row, "created_at", "WalletData", NaiveDateTime),
+            updated_at: extract_value!(row, "updated_at", "WalletData", NaiveDateTime)
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
+}
+
+impl LastWalletStatement {
+
+    pub fn new_empty() -> LastWalletStatement {
+        LastWalletStatement {
+            wallet_id: 0,
+            balances_date: NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
+            accounts_id: 0,
+            balance: Decimal::zero(),
+            minimum_payment: Decimal::zero(),
+            created_at: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            updated_at: NaiveDateTime::from_timestamp_opt(0, 0).unwrap()
+        }
+    }
+
+    pub fn get_statement_day(&self) -> NaiveDateTime {
+        self.created_at
+    }
+}
+
+
+impl LastAccountStatement {
+
+    pub fn new_empty() -> LastAccountStatement {
+        LastAccountStatement {
+            accounts_id: 0,
+            balances_date: NaiveDate::from_ymd_opt(2022, 1, 1).unwrap(),
+            wallets_id: 0,
+            balance: Decimal::zero(),
+            created_at: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            updated_at: NaiveDateTime::from_timestamp_opt(0, 0).unwrap()
+        }
+    }
+
+    pub fn get_balances_date(&self) -> NaiveDate { self.balances_date }
+}
+
+impl FromRow for LastWalletStatement {
+    fn from_row(row: Row) -> Self where Self: Sized {
+        LastWalletStatement {
+            wallet_id: extract_value!(row, "wallets_ID", "wallet_statements", WalletIdType),
+            balances_date: extract_value!(row, "balances_date", "wallet_statements", NaiveDate),
+            accounts_id: extract_value!(row, "accounts_ID", "wallet_statements", AccountIdType),
+            balance: extract_value!(row, "balance", "wallet_statements", Decimal),
+            minimum_payment: extract_value!(row, "minimum_payment", "wallet_statements", Decimal),
+            created_at: extract_value!(row, "created_at", "wallet_statements", NaiveDateTime),
+            updated_at: extract_value!(row, "updated_at", "wallet_statements", NaiveDateTime)
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
+}
+
+impl FromRow for LastAccountStatement {
+    fn from_row(row: Row) -> Self where Self: Sized {
+        LastAccountStatement {
+            accounts_id: extract_value!(row, "accounts_id", "account_statements", AccountIdType),
+            balances_date: extract_value!(row, "balances_date", "account_statements", NaiveDate),
+            wallets_id: extract_value!(row, "wallets_id", "account_statements", WalletIdType),
+            balance: extract_value!(row, "balance", "account_statements", Decimal),
+            created_at: extract_value!(row, "created_at", "account_statements", NaiveDateTime),
+            updated_at: extract_value!(row, "updated_at", "account_statements", NaiveDateTime)
+        }
+    }
+
+    fn from_row_opt(_row: Row) -> Result<Self, FromRowError> where Self: Sized { unimplemented!() }
 }
